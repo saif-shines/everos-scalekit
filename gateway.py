@@ -21,6 +21,9 @@ Run it::
     everos server start                        # EverOS on :8000
     uvicorn gateway:app --port 8080            # this file in front of it
 
+    # or in front of EverOS Cloud:
+    #   EVEROS_URL=https://api.evermind.ai EVEROS_API_KEY=<key> uvicorn ...
+
 See ``demo.py`` for the whole story end to end.
 """
 
@@ -35,6 +38,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 EVEROS_URL = os.environ.get("EVEROS_URL", "http://127.0.0.1:8000")
+
+# Self-hosted EverOS has no auth (this gateway IS its auth layer). EverOS Cloud
+# (https://api.evermind.ai) wants `Authorization: Bearer <api_key>` — supply it
+# via env and the gateway attaches it upstream. The Scalekit token in the
+# *inbound* Authorization header and this *outbound* key never mix.
+EVEROS_API_KEY = os.environ.get("EVEROS_API_KEY")
 
 # Mock mode stubs *only* the identity provider, so the demo runs without a
 # Scalekit account. Everything downstream is real: the scope derivation below,
@@ -58,8 +67,9 @@ if MOCK:
         return {"sub": parts[1], "oid": parts[2], "client_id": parts[3]}
 
 else:
-    from scalekit import ScalekitClient
     from scalekit.common.scalekit import TokenValidationOptions
+
+    from scalekit import ScalekitClient
 
     SK_ENV_URL = os.environ["SCALEKIT_ENV_URL"]
     scalekit = ScalekitClient(
@@ -129,8 +139,15 @@ async def proxy(action: str, request: Request) -> JSONResponse:
     asked_for = body.get("user_id")
     apply_scope(action, body, scope)
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        upstream = await client.post(f"{EVEROS_URL}/api/v2/memory/{action}", json=body)
+    upstream_headers = (
+        {"Authorization": f"Bearer {EVEROS_API_KEY}"} if EVEROS_API_KEY else {}
+    )
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        upstream = await client.post(
+            f"{EVEROS_URL}/api/v2/memory/{action}",
+            json=body,
+            headers=upstream_headers,
+        )
 
     payload = upstream.json()
     # Make the rewrite observable — this is the whole point of the layer.

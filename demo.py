@@ -88,7 +88,7 @@ def recall(token: str, *, claim_user_id: str | None = None) -> list[dict]:
     body: dict[str, object] = {"query": QUESTION, "top_k": 3}
     if claim_user_id:
         body["user_id"] = claim_user_id
-    deadline = time.monotonic() + 40
+    deadline = time.monotonic() + 90
     while True:
         payload = call("search", token, **body)
         episodes = payload.get("data", {}).get("episodes", [])
@@ -107,6 +107,9 @@ def main() -> None:
         "add",
         ALICE,
         session_id=SESSION,
+        # EverOS Cloud defaults to async_mode=true (202 queued); an immediate
+        # flush would race the queue. Synchronous add works on OSS and Cloud.
+        async_mode=False,
         messages=[
             # sender_id says "alice" — the gateway overwrites it with the token's
             # subject, so a client cannot write into someone else's memory either.
@@ -123,9 +126,11 @@ def main() -> None:
     for fact in FACTS:
         print(f"  → add     {fact}")
 
-    call("flush", ALICE, session_id=SESSION)
-    print("  → flush   extracted")
-    for path in episode_files(scope):
+    flushed = call("flush", ALICE, session_id=SESSION)
+    flush_status = flushed.get("data", {}).get("status", "?")
+    print(f"  → flush   {flush_status}")
+    on_disk = episode_files(scope)
+    for path in on_disk:
         print(f"            {path}")
 
     episodes = recall(ALICE)
@@ -133,8 +138,16 @@ def main() -> None:
     if not episodes:
         sys.exit("\n  Alice could not recall her own memory — stopping.\n")
     for episode in episodes:
-        for fact in episode.get("atomic_facts", []):
-            print(f"    OK    {fact['content']}")
+        # Matched facts when the index returns them; the episode's one-line
+        # subject otherwise (EverOS Cloud nests facts differently than OSS).
+        lines = [f["content"] for f in episode.get("atomic_facts") or []]
+        if not lines and episode.get("subject"):
+            lines = [episode["subject"]]
+        if not lines:
+            summary = episode.get("summary") or episode.get("episode") or ""
+            lines = [summary[:70] + ("…" if len(summary) > 70 else "")]
+        for line in lines:
+            print(f"    OK    {line}")
 
     # ── Bob asks the same question, claiming to be Alice ──────────────────
     rule("Bob", BOB)
@@ -148,11 +161,12 @@ def main() -> None:
     print(f"            gateway rewrote  user_id → {bob['user_id']}   (token sub)")
     print(f"                             app_id  → {bob['app_id']}   (token oid)")
 
-    verdict = (
-        "Alice's memory is on disk. Bob's request never reached it."
-        if not found
-        else "FAILED — Bob reached Alice's memory."
-    )
+    if found:
+        verdict = "FAILED — Bob reached Alice's memory."
+    elif on_disk:
+        verdict = "Alice's memory is on disk. Bob's request never reached it."
+    else:
+        verdict = "Alice's memory persisted. Bob's request never reached it."
     print(f"\n  {verdict}\n")
     sys.exit(0 if not found else 1)
 

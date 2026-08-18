@@ -10,8 +10,13 @@ Two tenants, one memory, one gateway. Alice stores a memory and recalls it;
 Bob then asks the same question *with Alice's `user_id` in the request body*.
 
 ```bash
-everos server start                                  # EverOS on :8000
-SCALEKIT_MOCK=1 uvicorn gateway:app --port 8080      # gateway in front
+# gateway in front of a self-hosted EverOS (everos server start) ...
+SCALEKIT_MOCK=1 uvicorn gateway:app --port 8080
+
+# ... or in front of EverOS Cloud
+SCALEKIT_MOCK=1 EVEROS_URL=https://api.evermind.ai EVEROS_API_KEY=<key> \
+    uvicorn gateway:app --port 8080
+
 python demo.py
 ```
 
@@ -20,9 +25,8 @@ python demo.py
   → add     I'm allergic to shellfish.
   → add     I had a bad reaction to shrimp last summer.
   → flush   extracted
-            ~/.everos/org_acme/prd_skc_demo/users/usr_alice/episodes/episode-….md
   → search  'what should I avoid at dinner?'
-    OK    Alice said she is allergic to shellfish.
+    OK    Alice reports a shellfish allergy and a bad reaction to shrimp last summer (summer 2025)
 
   Bob  usr_bob @ org_globex ──────────────────────────────────
   → search  'what should I avoid at dinner?'
@@ -31,11 +35,14 @@ python demo.py
             gateway rewrote  user_id → usr_bob   (token sub)
                              app_id  → org_globex   (token oid)
 
-  Alice's memory is on disk. Bob's request never reached it.
+  Alice's memory persisted. Bob's request never reached it.
 ```
 
-The recall line is LLM-extracted, so its wording varies run to run; the rest is
-deterministic. Bob only asks after Alice's recall has succeeded — EverOS's index
+Captured from a real run against EverOS Cloud (2026-08-18); the recall line is
+LLM-extracted, so its wording varies run to run. Note it inferred *(summer 2025)*
+from "last summer" — that is extraction working, not an echo of the input.
+Against a self-hosted server, the flush step also prints the episode's markdown
+path on disk. Bob only asks after Alice's recall has succeeded — EverOS's index
 is eventually consistent, so an empty result before that would prove nothing.
 
 `SCALEKIT_MOCK=1` stubs **only the identity provider** (tokens carry their
@@ -94,11 +101,11 @@ Scalekit's free tier is self-serve and includes unlimited dev environments.
 
 ## Status
 
-The demo pipeline (both scripts, all four request shapes, the rewrite, the
-tenant miss) is verified end to end in mock mode. The non-mock path — the
-Scalekit SDK's `validate_access_token_and_get_claims` call — is written from
-the published API reference and has not yet run against a live environment;
-reviews welcome.
+The demo has run end to end against EverOS Cloud — the capture above is from
+that run — and the scope rewrite is unit-verified for all four request shapes,
+including the `agent_id` sidestep. The one path not yet executed is the
+non-mock Scalekit call (`validate_access_token_and_get_claims`), written from
+the published API reference; reviews welcome.
 
 ## What this does not do yet
 
