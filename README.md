@@ -54,7 +54,7 @@ environment, drop the flag and pass two access tokens via `ALICE_TOKEN` /
 
 ## The mechanism
 
-[`gateway.py`](gateway.py) — about seventy lines. Scalekit validates the bearer
+[`gateway.py`](gateway.py) — one file, ~150 lines. Scalekit validates the bearer
 token; the scope is then derived from the claims and overwrites whatever the
 caller asked for:
 
