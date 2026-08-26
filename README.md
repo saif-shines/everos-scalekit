@@ -62,7 +62,7 @@ caller asked for:
 | --- | --- | --- | --- |
 | `sub` | `usr_8967800122X995270` | `user_id` | who is asking |
 | `oid` | `org_89678001X21929734` | `app_id` | which tenant they belong to |
-| `memory_project` | `support` | `project_id` | which desk / agent |
+| `memory_project` | `support` | `project_id` | which agentic product/module |
 
 `memory_project` is a custom [Token Claim](https://docs.scalekit.com/guides/accesstoken-claims/). Set the expression to `organization.metadata.memory_project ?? "agent"`. If the claim is missing, the gateway uses `EVEROS_PROJECT_ID` (default `agent`).
 
