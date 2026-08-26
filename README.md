@@ -64,7 +64,7 @@ caller asked for:
 | `oid` | `org_89678001X21929734` | `app_id` | which tenant they belong to |
 | `memory_project` | `support` | `project_id` | which agentic product/module |
 
-`memory_project` is a custom [Token Claim](https://docs.scalekit.com/guides/accesstoken-claims/). Set the expression to `organization.metadata.memory_project ?? "agent"`. If the claim is missing, the gateway uses `EVEROS_PROJECT_ID` (default `agent`).
+`memory_project` is a custom [Token Claim](https://docs.scalekit.com/guides/accesstoken-claims/). Org metadata holds the value. Token Claims copies it onto the JWT. This gateway reads that key. If the claim is missing, it uses `EVEROS_PROJECT_ID` (default `agent`).
 
 Do not map `client_id` → `project_id`. User tokens do include `client_id`, but it is the Scalekit application (`skc_…`) and is the same for every user. That is not an EverOS folder.
 
@@ -87,7 +87,55 @@ loopback. Its [API reference](https://github.com/EverMind-AI/EverOS/blob/main/do
 says *"place your own gateway or auth layer in front."* This repo is that
 sentence, implemented with Scalekit.
 
-## Run against a real Scalekit environment
+## Make `project_id` work
+
+`sub` and `oid` arrive on every user token. `project_id` does not. You must put
+the agentic product/module name in Scalekit, then tell this gateway which JWT
+key to read.
+
+### One product only
+
+Skip Token Claims. In this repo, set `EVEROS_PROJECT_ID` to the folder name
+(for example `agent`) and run the gateway. Every tenant then shares that one
+EverOS project. Tenant isolation still comes from `oid` → `app_id`.
+
+### Many products / modules
+
+Do the Scalekit steps first. Then run this repo. Old tokens will not grow the
+new claim. Mint again after you save Token Claims.
+
+#### 1. Scalekit dashboard
+
+**A. Write the value on each organization**
+
+1. Open the organization (Alice’s org, Bob’s org, …).
+2. Add metadata key `memory_project`.
+3. Set the value to the EverOS folder, for example `support` or `sales`.
+4. Save.
+
+This is the closet note. It is not on the JWT yet.
+
+**B. Copy that note onto every new access token**
+
+1. Open **Authentication → Token Claims**.
+2. Click **Add custom claim**.
+3. Claim name: `memory_project`.
+4. Expression: `organization.metadata.memory_project ?? "agent"`.
+5. Save.
+
+Preview a token if the page allows it. You must see a **top-level** key
+`memory_project`. Nested `organization.metadata` alone is not enough.
+
+**C. Sign users in again**
+
+Mint new user access tokens after step B. A token issued before the claim
+will not contain `memory_project`. The gateway will then fall back to `agent`.
+
+#### 2. This repo (`everos-scalekit`)
+
+1. Use this mapping in `gateway.py` (this change). Do not read `client_id`
+   for `project_id`.
+2. Install and export credentials. Do **not** set `SCALEKIT_MOCK=1`.
 
 ```bash
 pip install fastapi uvicorn httpx scalekit-sdk-python
@@ -95,14 +143,30 @@ pip install fastapi uvicorn httpx scalekit-sdk-python
 export SCALEKIT_ENV_URL="https://<your-env>.scalekit.dev"
 export SCALEKIT_CLIENT_ID="skc_..."
 export SCALEKIT_CLIENT_SECRET="..."
-# optional — claim name to read; default is memory_project
+# claim *name* to read — default is already memory_project
 # export SCALEKIT_PROJECT_CLAIM="memory_project"
-# optional — folder if that claim is absent; default is agent
+# folder if the claim is absent — default is already agent
 # export EVEROS_PROJECT_ID="agent"
 
-uvicorn gateway:app --port 8080     # no SCALEKIT_MOCK
+uvicorn gateway:app --port 8080
 ALICE_TOKEN="<jwt>" BOB_TOKEN="<jwt>" python demo.py
 ```
+
+`SCALEKIT_PROJECT_CLAIM` is the drawer name (`memory_project`). It is not the
+folder (`support` / `sales`). Those values come from the token.
+
+#### 3. Pass if
+
+Decode the JWT (do not paste it). Then call the gateway with that bearer token.
+
+| Who | Token has | Gateway `_scope.project_id` |
+| --- | --- | --- |
+| Alice | `"memory_project": "support"` | `support` |
+| Bob | `"memory_project": "sales"` | `sales` |
+| Claim missing | no `memory_project` key | `agent` (the fallback) |
+
+If both people still get `agent`, Token Claims is off, or you reused an old
+token. Fix the dashboard, mint again, then retry.
 
 Scalekit's free tier is self-serve and includes unlimited dev environments.
 
