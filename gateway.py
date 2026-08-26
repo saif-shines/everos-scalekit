@@ -51,8 +51,8 @@ EVEROS_API_KEY = os.environ.get("EVEROS_API_KEY")
 # never let this flip on by accident in front of a real EverOS.
 MOCK = os.environ.get("SCALEKIT_MOCK") == "1"
 
-# Fallback folder when the token has no project claim. ``SCALEKIT_PROJECT_CLAIM``
-# is the *name* of the claim to read (default ``memory_project``), not the value.
+# SCALEKIT_PROJECT_CLAIM is the claim name, not the folder.
+# EVEROS_PROJECT_ID is the fallback when that claim is missing.
 PROJECT_ID = os.environ.get("EVEROS_PROJECT_ID", "agent")
 PROJECT_CLAIM = os.environ.get("SCALEKIT_PROJECT_CLAIM", "memory_project")
 
@@ -92,18 +92,8 @@ else:
 
 
 def scope_from_claims(claims: Mapping[str, Any]) -> dict[str, str]:
-    """Scalekit's identity claims *are* EverOS's scope.
-
-    ``sub`` and ``oid`` map 1:1. ``project_id`` does not: a user JWT's
-    ``client_id`` is the Scalekit application (``skc_…``) and is the same
-    for every user, so it is not an EverOS folder. Read a custom claim
-    (default ``memory_project``) and fall back to ``EVEROS_PROJECT_ID``.
-
-    Both id formats already satisfy EverOS's ScopeId charset
-    (``^[a-zA-Z0-9_.-]+$``, 1-128 chars), so no sanitisation is needed.
-    EverOS guarantees a query never crosses ``(app_id, project_id)``, so
-    mapping the Scalekit organization onto ``app_id`` buys tenant isolation
-    with no enforcement code.
+    """sub → user_id, oid → app_id. project_id from memory_project, else EVEROS_PROJECT_ID.
+    Do not use client_id — it is the Scalekit app and is the same for every user.
     """
     return {
         "user_id": claims["sub"],  # usr_... — who is asking
