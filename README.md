@@ -62,10 +62,13 @@ caller asked for:
 | --- | --- | --- | --- |
 | `sub` | `usr_8967800122X995270` | `user_id` | who is asking |
 | `oid` | `org_89678001X21929734` | `app_id` | which tenant they belong to |
-| `client_id` | `prd_skc_7848964512134X699` | `project_id` | which application |
+| `memory_project` | `support` | `project_id` | which desk / agent |
 
-Two properties make this a straight assignment with no glue. Scalekit's id
-formats already satisfy EverOS's `ScopeId` charset (`^[a-zA-Z0-9_.-]+$`,
+`memory_project` is a custom [Token Claim](https://docs.scalekit.com/guides/accesstoken-claims/). Set the expression to `organization.metadata.memory_project ?? "agent"`. If the claim is missing, the gateway uses `EVEROS_PROJECT_ID` (default `agent`).
+
+Do not map `client_id` → `project_id`. User tokens do include `client_id`, but it is the Scalekit application (`skc_…`) and is the same for every user. That is not an EverOS folder.
+
+Scalekit's id formats already satisfy EverOS's `ScopeId` charset (`^[a-zA-Z0-9_.-]+$`,
 1–128 chars), so nothing needs sanitising. And EverOS already guarantees that a
 `/search` or `/get` never crosses an `(app_id, project_id)` pair — so mapping
 the Scalekit organization onto `app_id` buys tenant isolation without writing
@@ -92,6 +95,10 @@ pip install fastapi uvicorn httpx scalekit-sdk-python
 export SCALEKIT_ENV_URL="https://<your-env>.scalekit.dev"
 export SCALEKIT_CLIENT_ID="skc_..."
 export SCALEKIT_CLIENT_SECRET="..."
+# optional — claim name to read; default is memory_project
+# export SCALEKIT_PROJECT_CLAIM="memory_project"
+# optional — folder if that claim is absent; default is agent
+# export EVEROS_PROJECT_ID="agent"
 
 uvicorn gateway:app --port 8080     # no SCALEKIT_MOCK
 ALICE_TOKEN="<jwt>" BOB_TOKEN="<jwt>" python demo.py
@@ -103,9 +110,10 @@ Scalekit's free tier is self-serve and includes unlimited dev environments.
 
 The demo has run end to end against EverOS Cloud — the capture above is from
 that run — and the scope rewrite is unit-verified for all four request shapes,
-including the `agent_id` sidestep. The one path not yet executed is the
-non-mock Scalekit call (`validate_access_token_and_get_claims`), written from
-the published API reference; reviews welcome.
+including the `agent_id` sidestep. `validate_access_token_and_get_claims` has
+been run against a real Scalekit environment. User tokens carry `sub` and
+`oid` as mapped above. They also carry `client_id`; that value is the app, not
+the project, so this gateway no longer uses it for `project_id`.
 
 ## What this does not do yet
 

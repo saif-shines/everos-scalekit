@@ -51,6 +51,11 @@ EVEROS_API_KEY = os.environ.get("EVEROS_API_KEY")
 # never let this flip on by accident in front of a real EverOS.
 MOCK = os.environ.get("SCALEKIT_MOCK") == "1"
 
+# Fallback folder when the token has no project claim. ``SCALEKIT_PROJECT_CLAIM``
+# is the *name* of the claim to read (default ``memory_project``), not the value.
+PROJECT_ID = os.environ.get("EVEROS_PROJECT_ID", "agent")
+PROJECT_CLAIM = os.environ.get("SCALEKIT_PROJECT_CLAIM", "memory_project")
+
 app = FastAPI(title="everos-scalekit-gateway")
 
 if MOCK:
@@ -60,11 +65,11 @@ if MOCK:
     )
 
     def claims_for(token: str) -> Mapping[str, Any]:
-        """Decode a fake token of the form ``mock.<sub>.<oid>.<client_id>``."""
+        """Decode a fake token of the form ``mock.<sub>.<oid>.<project_id>``."""
         parts = token.split(".")
         if len(parts) != 4 or parts[0] != "mock":
             raise ValueError(f"not a mock token: {token!r}")
-        return {"sub": parts[1], "oid": parts[2], "client_id": parts[3]}
+        return {"sub": parts[1], "oid": parts[2], "memory_project": parts[3]}
 
 else:
     from scalekit.common.scalekit import TokenValidationOptions
@@ -87,7 +92,12 @@ else:
 
 
 def scope_from_claims(claims: Mapping[str, Any]) -> dict[str, str]:
-    """Scalekit's identity claims *are* EverOS's scope, verbatim.
+    """Scalekit's identity claims *are* EverOS's scope.
+
+    ``sub`` and ``oid`` map 1:1. ``project_id`` does not: a user JWT's
+    ``client_id`` is the Scalekit application (``skc_…``) and is the same
+    for every user, so it is not an EverOS folder. Read a custom claim
+    (default ``memory_project``) and fall back to ``EVEROS_PROJECT_ID``.
 
     Both id formats already satisfy EverOS's ScopeId charset
     (``^[a-zA-Z0-9_.-]+$``, 1-128 chars), so no sanitisation is needed.
@@ -98,7 +108,7 @@ def scope_from_claims(claims: Mapping[str, Any]) -> dict[str, str]:
     return {
         "user_id": claims["sub"],  # usr_... — who is asking
         "app_id": claims["oid"],  # org_... — which tenant they belong to
-        "project_id": claims["client_id"],  # prd_skc_... — which application
+        "project_id": str(claims.get(PROJECT_CLAIM) or PROJECT_ID),
     }
 
 

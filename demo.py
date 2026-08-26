@@ -28,10 +28,10 @@ import urllib.request
 GATEWAY = os.environ.get("GATEWAY_URL", "http://127.0.0.1:8080")
 MEMORY_ROOT = pathlib.Path(os.environ.get("EVEROS_ROOT", "~/.everos")).expanduser()
 
-# In mock mode a token is just its claims: mock.<sub>.<oid>.<client_id>.
+# In mock mode a token is just its claims: mock.<sub>.<oid>.<project_id>.
 # With a real Scalekit environment, drop in two access tokens instead.
-ALICE = os.environ.get("ALICE_TOKEN", "mock.usr_alice.org_acme.prd_skc_demo")
-BOB = os.environ.get("BOB_TOKEN", "mock.usr_bob.org_globex.prd_skc_demo")
+ALICE = os.environ.get("ALICE_TOKEN", "mock.usr_alice.org_acme.agent")
+BOB = os.environ.get("BOB_TOKEN", "mock.usr_bob.org_globex.agent")
 
 SESSION = f"demo-{int(time.time())}"
 QUESTION = "what should I avoid at dinner?"
