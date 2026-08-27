@@ -51,10 +51,8 @@ EVEROS_API_KEY = os.environ.get("EVEROS_API_KEY")
 # never let this flip on by accident in front of a real EverOS.
 MOCK = os.environ.get("SCALEKIT_MOCK") == "1"
 
-# SCALEKIT_PROJECT_CLAIM is the claim name, not the folder.
-# EVEROS_PROJECT_ID is the fallback when that claim is missing.
+# EVEROS_PROJECT_ID is the folder when memory_project is missing.
 PROJECT_ID = os.environ.get("EVEROS_PROJECT_ID", "agent")
-PROJECT_CLAIM = os.environ.get("SCALEKIT_PROJECT_CLAIM", "memory_project")
 
 app = FastAPI(title="everos-scalekit-gateway")
 
@@ -95,10 +93,13 @@ def scope_from_claims(claims: Mapping[str, Any]) -> dict[str, str]:
     """sub → user_id, oid → app_id. project_id from memory_project, else EVEROS_PROJECT_ID.
     Do not use client_id — it is the Scalekit app and is the same for every user.
     """
+    project_id = (
+        claims["memory_project"] if "memory_project" in claims else PROJECT_ID
+    )
     return {
         "user_id": claims["sub"],  # usr_... — who is asking
         "app_id": claims["oid"],  # org_... — which tenant they belong to
-        "project_id": str(claims.get(PROJECT_CLAIM) or PROJECT_ID),
+        "project_id": project_id,
     }
 
 
